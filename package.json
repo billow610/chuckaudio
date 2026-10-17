@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "faust2webaudio": "github:grame-cncm/faust2webaudio"
+  }
+}

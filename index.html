@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meditation — Interactive Web Soundscape</title>
+<style>
+  :root {
+    --bg: #0a0a12;
+    --panel: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+    --accent: #7eb8ff;
+    --accent2: #c4a0ff;
+    --text: #e0e0e8;
+    --dim: #666680;
+    --active: #4a9eff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Helvetica Neue', -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 { font-size: 1.4em; font-weight: 300; letter-spacing: 2px; margin: 16px 0 4px; color: var(--accent); }
+  .subtitle { font-size: 0.75em; color: var(--dim); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 24px; }
+  .main-panel {
+    width: 100%; max-width: 680px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .transport-row { display:flex; gap:12px; align-items:center; margin-bottom:20px; }
+  .btn-play {
+    width:56px; height:56px; border-radius:50%;
+    border:2px solid var(--accent); background:transparent;
+    color:var(--accent); font-size:1.5em; cursor:pointer;
+    transition: all 0.3s; display:flex; align-items:center; justify-content:center;
+  }
+  .btn-play.playing { background:var(--accent); color:var(--bg); }
+  .btn-play:hover { transform:scale(1.08); }
+  .status-text { font-size:0.8em; color:var(--dim); letter-spacing:1px; }
+  .timer { margin-left:auto; font-size:0.85em; color:var(--accent); font-variant-numeric: tabular-nums; }
+
+  .layer-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; }
+  .layer-card {
+    background:rgba(0,0,0,0.25); border:1px solid var(--border);
+    border-radius:12px; padding:14px 16px; transition:border-color 0.3s;
+  }
+  .layer-card.active { border-color:var(--accent); }
+  .layer-name { font-size:0.78em; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); margin-bottom:8px; }
+  .layer-card.active .layer-name { color:var(--accent); }
+  .slider-row { display:flex; align-items:center; gap:8px; }
+  input[type=range] {
+    flex:1; height:3px; -webkit-appearance:none; appearance:none;
+    background:rgba(255,255,255,0.12); border-radius:2px; outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+    background:var(--accent); cursor:pointer; transition:transform 0.15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform:scale(1.3); }
+  .val-label { font-size:0.7em; color:var(--dim); min-width:30px; text-align:right; font-variant-numeric:tabular-nums; }
+
+  .visualizer-panel {
+    width:100%; max-width:680px; height:120px;
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:16px; overflow:hidden; margin-bottom:16px;
+  }
+  canvas { width:100%; height:100%; display:block; }
+
+  .info-panel {
+    width:100%; max-width:680px;
+    font-size:0.72em; color:var(--dim); line-height:1.6; letter-spacing:0.5px;
+    padding:8px 16px;
+  }
+  .info-panel b { color:var(--accent); font-weight:500; }
+
+  .params-panel { width:100%; max-width:680px; }
+  .section-title { font-size:0.72em; color:var(--dim); letter-spacing:2px; text-transform:uppercase; margin:16px 0 10px; }
+</style>
+</head>
+<body>
+
+<h1>Meditation</h1>
+<div class="subtitle">Interactive Generative Soundscape</div>
+
+<div class="main-panel">
+  <div class="transport-row">
+    <button class="btn-play" id="btnPlay" title="播放 / 停止">▶</button>
+    <div class="status-text" id="statusText">点击播放开始</div>
+    <div class="timer" id="timer">00:00</div>
+  </div>
+
+  <div class="layer-grid">
+    <div class="layer-card" id="card-drone">
+      <div class="layer-name">Drone 持续音</div>
+      <div class="slider-row">
+        <input type="range" id="volDrone" min="0" max="100" value="70">
+        <span class="val-label" id="valDrone">70</span>
+      </div>
+    </div>
+    <div class="layer-card" id="card-bell">
+      <div class="layer-name">Bell 铃声</div>
+      <div class="slider-row">
+        <input type="range" id="volBell" min="0" max="100" value="50">
+        <span class="val-label" id="valBell">50</span>
+      </div>
+    </div>
+    <div class="layer-card" id="card-voice">
+      <div class="layer-name">Voice 无词人声</div>
+      <div class="slider-row">
+        <input type="range" id="volVoice" min="0" max="100" value="65">
+        <span class="val-label" id="valVoice">65</span>
+      </div>
+    </div>
+    <div class="layer-card" id="card-violin">
+      <div class="layer-name">Violin 小提琴</div>
+      <div class="slider-row">
+        <input type="range" id="volViolin" min="0" max="100" value="55">
+        <span class="val-label" id="valViolin">55</span>
+      </div>
+    </div>
+    <div class="layer-card" id="card-pad">
+      <div class="layer-name">Pad 和声垫</div>
+      <div class="slider-row">
+        <input type="range" id="volPad" min="0" max="100" value="45">
+        <span class="val-label" id="valPad">45</span>
+      </div>
+    </div>
+    <div class="layer-card" id="card-wind">
+      <div class="layer-name">Wind 风</div>
+      <div class="slider-row">
+        <input type="range" id="volWind" min="0" max="100" value="30">
+        <span class="val-label" id="valWind">30</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">空间</div>
+  <div class="layer-grid">
+    <div class="layer-card">
+      <div class="layer-name">Reverb 混响</div>
+      <div class="slider-row">
+        <input type="range" id="volReverb" min="0" max="100" value="50">
+        <span class="val-label" id="valReverb">50</span>
+      </div>
+    </div>
+    <div class="layer-card">
+      <div class="layer-name">Master 总音量</div>
+      <div class="slider-row">
+        <input type="range" id="volMaster" min="0" max="100" value="80">
+        <span class="val-label" id="valMaster">80</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">交互</div>
+  <div class="layer-grid">
+    <div class="layer-card">
+      <div class="layer-name">Vowel 元音 (人声)</div>
+      <div class="slider-row">
+        <input type="range" id="paramVowel" min="0" max="4" step="0.01" value="0">
+        <span class="val-label" id="valVowel">A</span>
+      </div>
+    </div>
+    <div class="layer-card">
+      <div class="layer-name">Bow Pressure (小提琴)</div>
+      <div class="slider-row">
+        <input type="range" id="paramBow" min="0" max="100" value="34">
+        <span class="val-label" id="valBow">34</span>
+      </div>
+    </div>
+    <div class="layer-card">
+      <div class="layer-name">Bell Density 铃声密度</div>
+      <div class="slider-row">
+        <input type="range" id="paramBellDens" min="0" max="100" value="20">
+        <span class="val-label" id="valBellDens">20</span>
+      </div>
+    </div>
+    <div class="layer-card">
+      <div class="layer-name">Voice Speed 人声速度</div>
+      <div class="slider-row">
+        <input type="range" id="paramVoiceSpd" min="0" max="100" value="50">
+        <span class="val-label" id="valVoiceSpd">50</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="visualizer-panel">
+  <canvas id="canvas"></canvas>
+</div>
+
+<div class="info-panel">
+  <b>架构：</b> Web Audio API 原生合成 + 卷积混响。所有音频在浏览器本地生成。
+  FOF 人声使用多共振峰滤波器模拟；小提琴使用锯齿波 + 低通滤波 + 弓压参数。
+  元音参数 A/E/I/O/U 共 5 个选项；铃声密度控制播放间隔。
+</div>
+
+<script>
+// ==================== GLOBAL STATE ====================
+let ctx = null;
+let isPlaying = false;
+let startTime = 0;
+let masterGain, reverbSend, reverbReturn;
+let layerGains = {};
+let schedulers = {};
+let analyser;
+let canvasCtx;
+
+const A4 = 432.0;
+const TEMP = A4 / 440.0;
+function mtof(n) { return Math.pow(2, (n-69)/12) * 440 * TEMP; }
+
+// A minor pentatonic
+const PENTA = [57, 60, 62, 64, 67, 69, 72, 74, 76, 79, 81];
+const DRONE_NOTES = [33, 40, 45, 52];
+const DRONE_GAINS = [0.115, 0.070, 0.060, 0.022];
+
+// Vowel formant frequencies (F1, F2, F3, F4) for A E I O U
+const VOWELS = [
+  [730, 1090, 2440, 3400],  // A
+  [530, 1840, 2480, 3400],  // E
+  [270, 2290, 3010, 3400],  // I
+  [570, 840, 2410, 3400],   // O
+  [300, 870, 2240, 3400],   // U
+];
+const VOWEL_NAMES = ['A', 'E', 'I', 'O', 'U'];
+
+function rand(a, b) { return a + Math.random() * (b - a); }
+function randInt(a, b) { return Math.floor(rand(a, b + 1)); }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+// ==================== INIT AUDIO ====================
+async function initAudio() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+
+  // Master chain: masterGain -> HPF -> compressor -> analyser -> destination
+  masterGain = ctx.createGain();
+  masterGain.gain.value = 0.8;
+
+  const hpf = ctx.createBiquadFilter();
+  hpf.type = 'highpass';
+  hpf.frequency.value = 40;
+
+  const compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -18;
+  compressor.ratio.value = 6;
+  compressor.knee.value = 10;
+
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.85;
+
+  masterGain.connect(hpf);
+  hpf.connect(compressor);
+  compressor.connect(analyser);
+  analyser.connect(ctx.destination);
+
+  // Reverb: ConvolverNode with generated impulse response
+  reverbSend = ctx.createGain();
+  reverbSend.gain.value = 0.5;
+  const convolver = ctx.createConvolver();
+  convolver.buffer = makeImpulseResponse(3.5, 3.0);
+  reverbReturn = ctx.createGain();
+  reverbReturn.gain.value = 0.5;
+
+  reverbSend.connect(convolver);
+  convolver.connect(reverbReturn);
+  reverbReturn.connect(masterGain);
+
+  // Long dark reverb for bells and violin
+  const longSend = ctx.createGain();
+  longSend.gain.value = 0.3;
+  const longConvolver = ctx.createConvolver();
+  longConvolver.buffer = makeImpulseResponse(6.5, 2.0);
+  const longReturn = ctx.createGain();
+  longReturn.gain.value = 0.4;
+  longSend.connect(longConvolver);
+  longConvolver.connect(longReturn);
+  longReturn.connect(masterGain);
+
+  layerGains.longSend = longSend;
+
+  // Layer gains
+  const layers = ['drone', 'bell', 'voice', 'violin', 'pad', 'wind'];
+  layers.forEach(name => {
+    layerGains[name] = ctx.createGain();
+    layerGains[name].gain.value = 0;
+    layerGains[name].connect(masterGain);
+    // Also send to reverb
+    layerGains[name].connect(reverbSend);
+  });
+
+  // Bells and violin also go to long reverb
+  layerGains.bell.connect(longSend);
+  layerGains.violin.connect(longSend);
+}
+
+function makeImpulseResponse(duration, decay) {
+  const rate = ctx.sampleRate;
+  const length = Math.floor(rate * duration);
+  const impulse = ctx.createBuffer(2, length, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = impulse.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+    }
+  }
+  return impulse;
+}
+
+// ==================== DRONE ====================
+function startDrone() {
+  const gain = layerGains.drone;
+  gain.gain.setTargetAtTime(volSlider('Drone') / 100 * 0.5, ctx.currentTime, 8);
+  const oscs = [];
+  DRONE_NOTES.forEach((note, i) => {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    const detune = rand(0.5, 4.0) / 1200;
+    osc.frequency.value = mtof(note) * Math.pow(2, detune);
+    const g = ctx.createGain();
+    g.gain.value = DRONE_GAINS[i];
+    // Breathing LFO
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 1 / rand(18, 38);
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = DRONE_GAINS[i] * 0.28;
+    lfo.connect(lfoGain);
+    lfoGain.connect(g.gain);
+    osc.connect(g);
+    g.connect(gain);
+    osc.start();
+    lfo.start();
+    oscs.push(osc, lfo);
+  });
+  schedulers.drone = oscs;
+}
+
+// ==================== BELL ====================
+function playBell() {
+  const gain = layerGains.bell;
+  const note = pick(PENTA);
+  const freq = mtof(note);
+  const t = ctx.currentTime;
+
+  // FM bell: carrier + modulator
+  const carrier = ctx.createOscillator();
+  carrier.type = 'sine';
+  carrier.frequency.value = freq;
+
+  const modulator = ctx.createOscillator();
+  modulator.type = 'sine';
+  modulator.frequency.value = freq * 2.01;
+
+  const modGain = ctx.createGain();
+  modGain.gain.setValueAtTime(freq * 1.5, t);
+  modGain.gain.exponentialRampToValueAtTime(freq * 0.01, t + 4.0);
+
+  modulator.connect(modGain);
+  modGain.connect(carrier.frequency);
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(0.3, t + 0.01);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 5.0);
+
+  const panner = ctx.createStereoPanner();
+  panner.pan.value = rand(-0.6, 0.6);
+
+  carrier.connect(env);
+  env.connect(panner);
+  panner.connect(gain);
+
+  carrier.start(t);
+  modulator.start(t);
+  carrier.stop(t + 6);
+  modulator.stop(t + 6);
+}
+
+function scheduleBells() {
+  let count = 0;
+  function tick() {
+    if (!isPlaying) return;
+    playBell();
+    const density = paramSlider('BellDens') / 100;
+    const interval = Math.max(4, 30 - density * 24 + rand(-4, 8));
+    schedulers.bell = setTimeout(tick, interval * 1000);
+  }
+  // Opening bell at 2s
+  setTimeout(() => { if (isPlaying) playBell(); }, 2000);
+  schedulers.bell = setTimeout(tick, 15000);
+}
+
+// ==================== FOF VOCAL (formant synthesis) ====================
+function createVoiceNote(freq, vowelIdx, duration, vel) {
+  const gain = layerGains.voice;
+  const t = ctx.currentTime;
+
+  // Glottal source: sawtooth with slight noise
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(freq * 0.98, t);
+  osc.frequency.linearRampToValueAtTime(freq, t + 0.3);
+
+  // Vibrato LFO
+  const vib = ctx.createOscillator();
+  vib.type = 'sine';
+  vib.frequency.value = rand(4.0, 5.5);
+  const vibGain = ctx.createGain();
+  vibGain.gain.value = freq * 0.012;
+  vib.connect(vibGain);
+  vibGain.connect(osc.frequency);
+
+  // Formant filter bank (parallel bandpass)
+  const formants = VOWELS[vowelIdx % 5];
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(vel, t + duration * 0.15);
+  env.gain.setValueAtTime(vel, t + duration * 0.85);
+  env.gain.linearRampToValueAtTime(0, t + duration);
+
+  const panner = ctx.createStereoPanner();
+  panner.pan.value = rand(-0.3, 0.3);
+
+  formants.forEach((fFreq, i) => {
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = fFreq;
+    bp.Q.value = 8 - i * 1.5;
+    const fg = ctx.createGain();
+    // Formant amplitude weights
+    fg.gain.value = [1.0, 0.6, 0.35, 0.15][i];
+    osc.connect(bp);
+    bp.connect(fg);
+    fg.connect(env);
+  });
+
+  env.connect(panner);
+  panner.connect(gain);
+
+  osc.start(t);
+  vib.start(t);
+  osc.stop(t + duration + 0.5);
+  vib.stop(t + duration + 0.5);
+}
+
+function scheduleVoice() {
+  let entryDone = false;
+  function tick() {
+    if (!isPlaying) return;
+    const elapsed = (ctx.currentTime - startTime);
+    if (!entryDone && elapsed < 15) {
+      schedulers.voice = setTimeout(tick, 1000);
+      return;
+    }
+    entryDone = true;
+
+    const speed = paramSlider('VoiceSpd') / 100;
+    const note = pick(PENTA.slice(2));
+    const freq = mtof(note);
+    const vowelIdx = Math.floor(paramSlider('Vowel')) || randInt(0, 4);
+    const duration = rand(3, 6) + speed * 4;
+    createVoiceNote(freq, vowelIdx, duration, 0.25);
+
+    const gap = Math.max(0.5, rand(3, 8) - speed * 4);
+    schedulers.voice = setTimeout(tick, (duration + gap) * 1000);
+  }
+  schedulers.voice = setTimeout(tick, 15000); // Entry at 15s
+}
+
+// ==================== VIOLIN (bowed string approximation) ====================
+function playViolinNote(freq, duration, vel) {
+  const gain = layerGains.violin;
+  const t = ctx.currentTime;
+
+  // Sawtooth source with vibrato
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(freq * 0.97, t);
+  osc.frequency.linearRampToValueAtTime(freq, t + 0.15);
+
+  const vib = ctx.createOscillator();
+  vib.type = 'sine';
+  vib.frequency.value = rand(4.0, 5.0);
+  const vibGain = ctx.createGain();
+  vibGain.gain.value = freq * 0.008;
+  vib.connect(vibGain);
+  vibGain.connect(osc.frequency);
+
+  // Bow filter (lowpass with resonance simulates bow-string interaction)
+  const bowPressure = paramSlider('Bow') / 100;
+  const lpf = ctx.createBiquadFilter();
+  lpf.type = 'lowpass';
+  lpf.frequency.value = 1800 + bowPressure * 2500;
+  lpf.Q.value = 2 + bowPressure * 6;
+
+  // Envelope with smooth attack and release
+  const env = ctx.createGain();
+  const attackTime = Math.min(1.2, duration * 0.2);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(vel, t + attackTime);
+  env.gain.setValueAtTime(vel, t + duration - 0.8);
+  env.gain.linearRampToValueAtTime(0, t + duration);
+
+  // LPF after env (dark filter)
+  const darkLPF = ctx.createBiquadFilter();
+  darkLPF.type = 'lowpass';
+  darkLPF.frequency.value = 3400;
+
+  const panner = ctx.createStereoPanner();
+  panner.pan.value = rand(-0.4, 0.4);
+
+  osc.connect(lpf);
+  lpf.connect(env);
+  env.connect(darkLPF);
+  darkLPF.connect(panner);
+  panner.connect(gain);
+
+  osc.start(t);
+  vib.start(t);
+  osc.stop(t + duration + 0.5);
+  vib.stop(t + duration + 0.5);
+}
+
+function scheduleViolin() {
+  let entryDone = false;
+  function tick() {
+    if (!isPlaying) return;
+    const elapsed = ctx.currentTime - startTime;
+    if (!entryDone && elapsed < 9) { // Enter at ~3% of 5 min = 9s
+      schedulers.violin = setTimeout(tick, 1000);
+      return;
+    }
+    entryDone = true;
+
+    // Short melodic motif: 3-5 notes
+    const motifLen = randInt(3, 5);
+    const scaleRoot = pick([0, 2, 4]); // offset into PENTA
+    for (let i = 0; i < motifLen; i++) {
+      const noteIdx = scaleRoot + randInt(0, 4);
+      const note = PENTA[Math.min(noteIdx, PENTA.length - 1)];
+      const freq = mtof(note);
+      const noteDur = rand(2.2, 3.8);
+      const vel = rand(0.08, 0.16);
+      setTimeout(() => {
+        if (isPlaying) playViolinNote(freq, noteDur, vel);
+      }, i * (noteDur - 0.5) * 1000);
+    }
+    const motifGap = rand(6, 12);
+    schedulers.violin = setTimeout(tick, motifLen * 3 * 1000 + motifGap * 1000);
+  }
+  schedulers.violin = setTimeout(tick, 9000);
+}
+
+// ==================== PAD ====================
+const PAD_CHORDS = [
+  [57, 64, 67, 71], // Am9
+  [53, 60, 65, 69], // Fmaj7
+  [48, 55, 62, 67], // Csus2
+  [55, 62, 66, 69], // G7/G
+];
+let padChordIdx = 0;
+
+function schedulePads() {
+  function playChord() {
+    if (!isPlaying) return;
+    const gain = layerGains.pad;
+    const t = ctx.currentTime;
+    const chord = PAD_CHORDS[padChordIdx % PAD_CHORDS.length];
+    padChordIdx++;
+    const dur = rand(14, 22);
+
+    chord.forEach(note => {
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = mtof(note) * Math.pow(2, rand(-2, 2) / 1200);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.025, t + dur * 0.3);
+      env.gain.setValueAtTime(0.025, t + dur * 0.7);
+      env.gain.linearRampToValueAtTime(0, t + dur);
+      osc.connect(env);
+      env.connect(gain);
+      osc.start(t);
+      osc.stop(t + dur + 1);
+    });
+
+    schedulers.pad = setTimeout(playChord, dur * 1000 * 0.75);
+  }
+  schedulers.pad = setTimeout(playChord, 8000);
+}
+
+// ==================== WIND ====================
+function scheduleWind() {
+  schedulers.wind = setTimeout(() => {
+    if (!isPlaying) return;
+    const gain = layerGains.wind;
+    const t = ctx.currentTime;
+    const dur = rand(20, 40);
+    gain.gain.cancelScheduledValues(t);
+    gain.gain.setTargetAtTime(volSlider('Wind') / 100 * 0.15, t, 5);
+    gain.gain.setTargetAtTime(0, t + dur, 8);
+
+    // Recurring gusts
+    const gustInterval = setInterval(() => {
+      if (!isPlaying) { clearInterval(gustInterval); return; }
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = rand(400, 1200);
+      bp.Q.value = rand(0.5, 1.5);
+      const n = ctx.createBufferSource();
+      n.buffer = makeNoiseBuffer(2);
+      n.loop = true;
+      const ng = ctx.createGain();
+      ng.gain.value = 0;
+      ng.gain.setTargetAtTime(0.04, ctx.currentTime, 3);
+      ng.gain.setTargetAtTime(0, ctx.currentTime + rand(4, 8), 5);
+      n.connect(bp);
+      bp.connect(ng);
+      ng.connect(gain);
+      n.start();
+      n.stop(ctx.currentTime + 15);
+    }, rand(8, 15) * 1000);
+    schedulers.windGust = gustInterval;
+  }, 120000); // Enter at 2 min
+}
+
+let noiseBuf = null;
+function makeNoiseBuffer(seconds) {
+  if (noiseBuf && noiseBuf.duration >= seconds) return noiseBuf;
+  const rate = ctx.sampleRate;
+  const len = Math.floor(rate * seconds);
+  noiseBuf = ctx.createBuffer(1, len, rate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return noiseBuf;
+}
+
+// ==================== UI HELPERS ====================
+function volSlider(name) {
+  const el = document.getElementById('vol' + name);
+  return el ? parseFloat(el.value) : 50;
+}
+function paramSlider(name) {
+  const el = document.getElementById('param' + name);
+  return el ? parseFloat(el.value) : 50;
+}
+
+function bindSlider(inputId, valId, callback) {
+  const el = document.getElementById(inputId);
+  const label = document.getElementById(valId);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    if (label) label.textContent = el.value;
+    if (callback) callback(parseFloat(el.value));
+  });
+}
+
+// ==================== TRANSPORT ====================
+const btn = document.getElementById('btnPlay');
+const statusText = document.getElementById('statusText');
+const timerEl = document.getElementById('timer');
+
+btn.addEventListener('click', async () => {
+  if (!isPlaying) {
+    await initAudio();
+    await ctx.resume();
+    startTime = ctx.currentTime;
+    isPlaying = true;
+    btn.textContent = '■';
+    btn.classList.add('playing');
+    statusText.textContent = '正在播放...';
+    startDrone();
+    scheduleBells();
+    scheduleVoice();
+    scheduleViolin();
+    schedulePads();
+    scheduleWind();
+    updateLayerGains();
+    updateTimer();
+  } else {
+    stopAll();
+  }
+});
+
+function stopAll() {
+  isPlaying = false;
+  btn.textContent = '▶';
+  btn.classList.remove('playing');
+  statusText.textContent = '已停止';
+  timerEl.textContent = '00:00';
+  Object.values(schedulers).forEach(s => {
+    if (typeof s === 'number') clearTimeout(s);
+    if (typeof s === 'function') clearInterval(s);
+  });
+  schedulers = {};
+  if (ctx) {
+    masterGain.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
+    setTimeout(() => { ctx.close(); ctx = null; }, 1500);
+  }
+}
+
+function updateLayerGains() {
+  const layers = ['Drone', 'Bell', 'Voice', 'Violin', 'Pad', 'Wind'];
+  layers.forEach(name => {
+    const key = name.toLowerCase();
+    if (layerGains[key]) {
+      const val = volSlider(name) / 100;
+      layerGains[key].gain.setTargetAtTime(
+        key === 'drone' ? val * 0.5 : val * 0.3,
+        ctx.currentTime, 0.3
+      );
+    }
+  });
+  const masterVal = volSlider('Master') / 100;
+  if (masterGain) masterGain.gain.setTargetAtTime(masterVal, ctx.currentTime, 0.1);
+  const revVal = volSlider('Reverb') / 100;
+  if (reverbSend) reverbSend.gain.setTargetAtTime(revVal, ctx.currentTime, 0.1);
+}
+
+// Bind layer volume sliders
+['Drone','Bell','Voice','Violin','Pad','Wind','Master','Reverb'].forEach(name => {
+  bindSlider('vol' + name, 'val' + name, () => { if (isPlaying) updateLayerGains(); });
+});
+
+// Vowel display
+bindSlider('paramVowel', 'valVowel', (v) => {
+  const idx = Math.min(4, Math.floor(v));
+  document.getElementById('valVowel').textContent = VOWEL_NAMES[idx];
+  if (isPlaying && layerGains.voice) {
+    // Update vowel for next note
+  }
+});
+
+
+// Parameter sliders (Bow, BellDens, VoiceSpd) - bind labels
+bindSlider('paramBow', 'valBow');
+bindSlider('paramBellDens', 'valBellDens');
+bindSlider('paramVoiceSpd', 'valVoiceSpd');
+// ==================== TIMER ====================
+function updateTimer() {
+  if (!isPlaying) return;
+  const elapsed = Math.floor(ctx.currentTime - startTime);
+  const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  timerEl.textContent = m + ':' + s;
+  requestAnimationFrame(updateTimer);
+}
+
+// ==================== VISUALIZER ====================
+function drawVisualizer() {
+  const canvas = document.getElementById('canvas');
+  canvasCtx = canvas.getContext('2d');
+  function draw() {
+    requestAnimationFrame(draw);
+    const w = canvas.width = canvas.clientWidth * devicePixelRatio;
+    const h = canvas.height = canvas.clientHeight * devicePixelRatio;
+    canvasCtx.clearRect(0, 0, w, h);
+    if (!analyser || !isPlaying) return;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    const bars = 80;
+    const barW = w / bars;
+    for (let i = 0; i < bars; i++) {
+      const idx = Math.floor(i * data.length / bars / 2);
+      const val = data[idx] / 255;
+      const barH = val * h * 0.9;
+      const hue = 200 + val * 60;
+      canvasCtx.fillStyle = `hsla(${hue}, 70%, ${30 + val * 30}%, ${0.3 + val * 0.5})`;
+      canvasCtx.fillRect(i * barW, h - barH, barW - 1, barH);
+    }
+  }
+  draw();
+}
+drawVisualizer();
+
+// ==================== AUTO-SYNC VOICE/VOWEL ====================
+// Periodically update voice gain from slider
+setInterval(() => {
+  if (isPlaying && layerGains.voice) {
+    const v = volSlider('Voice') / 100;
+    layerGains.voice.gain.setTargetAtTime(v * 0.35, ctx.currentTime, 0.5);
+  }
+}, 500);
+</script>
+</body>
+</html>

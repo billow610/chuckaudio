@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meditation — Faust Physical Model Edition</title>
+<style>
+  :root {
+    --bg: #0a0a12; --panel: rgba(255,255,255,0.04); --border: rgba(255,255,255,0.08);
+    --accent: #7eb8ff; --accent2: #c4a0ff; --text: #e0e0e8; --dim: #666680;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Helvetica Neue', -apple-system, sans-serif;
+    min-height: 100vh; display:flex; flex-direction:column; align-items:center; padding:20px;
+  }
+  h1 { font-size:1.4em; font-weight:300; letter-spacing:2px; margin:16px 0 4px; color:var(--accent); }
+  .subtitle { font-size:0.75em; color:var(--dim); letter-spacing:3px; text-transform:uppercase; margin-bottom:24px; }
+  .badge { display:inline-block; background:rgba(196,160,255,0.15); color:var(--accent2);
+    font-size:0.65em; padding:2px 10px; border-radius:10px; margin-left:8px; vertical-align:middle; }
+  .main-panel { width:100%; max-width:680px; background:var(--panel); border:1px solid var(--border);
+    border-radius:16px; padding:24px; margin-bottom:16px; }
+  .transport-row { display:flex; gap:12px; align-items:center; margin-bottom:20px; }
+  .btn-play { width:56px; height:56px; border-radius:50%; border:2px solid var(--accent);
+    background:transparent; color:var(--accent); font-size:1.5em; cursor:pointer;
+    transition:all 0.3s; display:flex; align-items:center; justify-content:center; }
+  .btn-play.playing { background:var(--accent); color:var(--bg); }
+  .btn-play:disabled { opacity:0.3; cursor:wait; }
+  .btn-play:hover:not(:disabled) { transform:scale(1.08); }
+  .status-text { font-size:0.8em; color:var(--dim); letter-spacing:1px; }
+  .timer { margin-left:auto; font-size:0.85em; color:var(--accent); font-variant-numeric:tabular-nums; }
+  .layer-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; }
+  .layer-card { background:rgba(0,0,0,0.25); border:1px solid var(--border);
+    border-radius:12px; padding:14px 16px; transition:border-color 0.3s; }
+  .layer-card.active { border-color:var(--accent); }
+  .layer-name { font-size:0.78em; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); margin-bottom:8px; }
+  .layer-card.active .layer-name { color:var(--accent); }
+  .slider-row { display:flex; align-items:center; gap:8px; }
+  input[type=range] { flex:1; height:3px; -webkit-appearance:none; appearance:none;
+    background:rgba(255,255,255,0.12); border-radius:2px; outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px;
+    border-radius:50%; background:var(--accent); cursor:pointer; transition:transform 0.15s; }
+  input[type=range]::-webkit-slider-thumb:hover { transform:scale(1.3); }
+  .val-label { font-size:0.7em; color:var(--dim); min-width:30px; text-align:right; font-variant-numeric:tabular-nums; }
+  .section-title { font-size:0.72em; color:var(--dim); letter-spacing:2px; text-transform:uppercase; margin:16px 0 10px; }
+  .visualizer-panel { width:100%; max-width:680px; height:120px;
+    background:var(--panel); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:16px; }
+  canvas { width:100%; height:100%; display:block; }
+  .info-panel { width:100%; max-width:680px; font-size:0.72em; color:var(--dim);
+    line-height:1.6; letter-spacing:0.5px; padding:8px 16px; }
+  .info-panel b { color:var(--accent); font-weight:500; }
+  .loading { display:flex; align-items:center; gap:8px; font-size:0.75em; color:var(--accent2); margin-top:8px; }
+  .spinner { width:14px; height:14px; border:2px solid var(--accent2); border-top-color:transparent;
+    border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<h1>Meditation <span class="badge">Faust 物理模型</span></h1>
+<div class="subtitle">Interactive Generative Soundscape</div>
+
+<div class="main-panel">
+  <div class="transport-row">
+    <button class="btn-play" id="btnPlay" disabled title="加载中...">▶</button>
+    <div>
+      <div class="status-text" id="statusText">正在加载 Faust 编译器...</div>
+      <div class="loading" id="loadingIndicator">
+        <div class="spinner"></div>
+        <span id="loadingText">初始化 WASM 模块</span>
+      </div>
+    </div>
+    <div class="timer" id="timer">00:00</div>
+  </div>
+
+  <div class="layer-grid">
+    <div class="layer-card" id="card-drone"><div class="layer-name">Drone 持续音</div>
+      <div class="slider-row"><input type="range" id="volDrone" min="0" max="100" value="70"><span class="val-label" id="valDrone">70</span></div></div>
+    <div class="layer-card" id="card-bell"><div class="layer-name">Bell 铃声</div>
+      <div class="slider-row"><input type="range" id="volBell" min="0" max="100" value="50"><span class="val-label" id="valBell">50</span></div></div>
+    <div class="layer-card" id="card-voice"><div class="layer-name">Voice FOF 人声</div>
+      <div class="slider-row"><input type="range" id="volVoice" min="0" max="100" value="65"><span class="val-label" id="valVoice">65</span></div></div>
+    <div class="layer-card" id="card-violin"><div class="layer-name">Violin 弦乐</div>
+      <div class="slider-row"><input type="range" id="volViolin" min="0" max="100" value="55"><span class="val-label" id="valViolin">55</span></div></div>
+    <div class="layer-card" id="card-pad"><div class="layer-name">Pad 和声垫</div>
+      <div class="slider-row"><input type="range" id="volPad" min="0" max="100" value="45"><span class="val-label" id="valPad">45</span></div></div>
+    <div class="layer-card" id="card-wind"><div class="layer-name">Wind 风</div>
+      <div class="slider-row"><input type="range" id="volWind" min="0" max="100" value="30"><span class="val-label" id="valWind">30</span></div></div>
+  </div>
+
+  <div class="section-title">空间</div>
+  <div class="layer-grid">
+    <div class="layer-card"><div class="layer-name">Reverb 混响</div>
+      <div class="slider-row"><input type="range" id="volReverb" min="0" max="100" value="50"><span class="val-label" id="valReverb">50</span></div></div>
+    <div class="layer-card"><div class="layer-name">Master 总音量</div>
+      <div class="slider-row"><input type="range" id="volMaster" min="0" max="100" value="80"><span class="val-label" id="valMaster">80</span></div></div>
+  </div>
+
+  <div class="section-title">Faust 物理模型参数</div>
+  <div class="layer-grid">
+    <div class="layer-card"><div class="layer-name">Vowel 元音</div>
+      <div class="slider-row"><input type="range" id="paramVowel" min="0" max="4" step="0.01" value="0"><span class="val-label" id="valVowel">A</span></div></div>
+    <div class="layer-card"><div class="layer-name">Vocal Gain 人声增益</div>
+      <div class="slider-row"><input type="range" id="paramVocalGain" min="0" max="100" value="65"><span class="val-label" id="valVocalGain">65</span></div></div>
+    <div class="layer-card"><div class="layer-name">Bow Pressure 弓压</div>
+      <div class="slider-row"><input type="range" id="paramBow" min="0" max="100" value="34"><span class="val-label" id="valBow">34</span></div></div>
+    <div class="layer-card"><div class="layer-name">Violin Gain 弦乐增益</div>
+      <div class="slider-row"><input type="range" id="paramViolinGain" min="0" max="100" value="48"><span class="val-label" id="valViolinGain">48</span></div></div>
+    <div class="layer-card"><div class="layer-name">Bell Density 铃声密度</div>
+      <div class="slider-row"><input type="range" id="paramBellDens" min="0" max="100" value="20"><span class="val-label" id="valBellDens">20</span></div></div>
+    <div class="layer-card"><div class="layer-name">Voice Speed 人声速度</div>
+      <div class="slider-row"><input type="range" id="paramVoiceSpd" min="0" max="100" value="50"><span class="val-label" id="valVoiceSpd">50</span></div></div>
+  </div>
+</div>
+
+<div class="visualizer-panel"><canvas id="canvas"></canvas></div>
+
+<div class="info-panel">
+  <b>Vocal:</b> Faust <code>pm.SFFormantModelFofSmooth_ui_MIDI</code> — FOF 共振峰物理模型<br>
+  <b>Violin:</b> Faust <code>pm.violin_ui_MIDI</code> — 弓弦交互物理模型<br>
+  <b>编译方式:</b> Faust WASM 编译器在浏览器内实时编译 DSP 代码
+</div>
+
+<script src="faust-lib.js"></script>
+<script>
+// ==================== GLOBAL STATE ====================
+let ctx = null;
+let isPlaying = false;
+let faustReady = false;
+let faust = null;
+let vocalNode = null;
+let violinNode = null;
+let startTime = 0;
+let masterGain, reverbSend, longSend;
+let layerGains = {};
+let schedulers = {};
+let analyser;
+
+const A4 = 432.0;
+const TEMP = A4 / 440.0;
+function mtof(n) { return Math.pow(2, (n-69)/12) * 440 * TEMP; }
+function rand(a, b) { return a + Math.random() * (b - a); }
+function randInt(a, b) { return Math.floor(rand(a, b + 1)); }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+const PENTA = [57, 60, 62, 64, 67, 69, 72, 74, 76, 79, 81];
+const DRONE_NOTES = [33, 40, 45, 52];
+const DRONE_GAINS = [0.115, 0.070, 0.060, 0.022];
+const VOWEL_NAMES = ['A', 'E', 'I', 'O', 'U'];
+
+// ==================== FAUST INIT ====================
+async function initFaust() {
+  const statusText = document.getElementById('statusText');
+  const loadingEl = document.getElementById('loadingIndicator');
+  const loadingText = document.getElementById('loadingText');
+
+  try {
+    loadingText.textContent = '加载 Faust WASM 编译器';
+    faust = new Faust2WebAudio.Faust({
+      debug: false,
+      wasmLocation: 'libfaust-wasm.wasm',
+      dataLocation: 'libfaust-wasm.data'
+    });
+    await faust.ready;
+    faustReady = true;
+    loadingText.textContent = '编译 Faust DSP 模块';
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+    ctx = audioCtx;
+
+    // Vocal: FOF formant model
+    const vocalCode = `import("stdfaust.lib"); process = pm.SFFormantModelFofSmooth_ui_MIDI <: _,_;`;
+    vocalNode = await faust.getNode(vocalCode, {
+      audioCtx: audioCtx,
+      useWorklet: window.AudioWorklet ? true : false,
+      args: { "-I": "libraries/" }
+    });
+
+    // Violin: bowed string physical model
+    const violinCode = `import("stdfaust.lib"); process = pm.violin_ui_MIDI <: _,_;`;
+    violinNode = await faust.getNode(violinCode, {
+      audioCtx: audioCtx,
+      useWorklet: window.AudioWorklet ? true : false,
+      args: { "-I": "libraries/" }
+    });
+
+    // Set default parameters (matching ChucK version)
+    vocalNode.setParamValue('/vocal/midi/gain', 0.65);
+    vocalNode.setParamValue('/vocal/otherParams/outGain', 0.48);
+    vocalNode.setParamValue('/vocal/otherParams/vibratoFreq', 4.5);
+    vocalNode.setParamValue('/vocal/otherParams/vibratoGain', 0.15);
+
+    violinNode.setParamValue('/violin/midi/gain', 0.48);
+    violinNode.setParamValue('/violin/midi/envAttack', 18.0);
+    violinNode.setParamValue('/violin/midi/sustain', 0.0);
+    violinNode.setParamValue('/violin/bow/pressure', 0.34);
+    violinNode.setParamValue('/violin/bow/position', 0.72);
+    violinNode.setParamValue('/violin/otherParams/vibratoFrequency', 4.5);
+    violinNode.setParamValue('/violin/otherParams/vibratoGain', 0.22);
+    violinNode.setParamValue('/violin/otherParams/outGain', 0.52);
+
+    loadingEl.style.display = 'none';
+    statusText.textContent = 'Faust 模型已就绪，点击播放';
+    document.getElementById('btnPlay').disabled = false;
+    document.getElementById('btnPlay').title = '播放 / 停止';
+  } catch (err) {
+    loadingEl.style.display = 'none';
+    statusText.textContent = 'Faust 加载失败: ' + err.message;
+    console.error(err);
+  }
+}
+
+// ==================== INIT AUDIO GRAPH ====================
+function initAudioGraph() {
+  masterGain = ctx.createGain();
+  masterGain.gain.value = 0.8;
+
+  const hpf = ctx.createBiquadFilter();
+  hpf.type = 'highpass'; hpf.frequency.value = 40;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -18; comp.ratio.value = 6; comp.knee.value = 10;
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.85;
+
+  masterGain.connect(hpf); hpf.connect(comp);
+  comp.connect(analyser); analyser.connect(ctx.destination);
+
+  // Reverbs
+  reverbSend = ctx.createGain(); reverbSend.gain.value = 0.5;
+  const conv = ctx.createConvolver(); conv.buffer = makeIR(3.5, 3.0);
+  const revRet = ctx.createGain(); revRet.gain.value = 0.5;
+  reverbSend.connect(conv); conv.connect(revRet); revRet.connect(masterGain);
+
+  longSend = ctx.createGain(); longSend.gain.value = 0.3;
+  const longConv = ctx.createConvolver(); longConv.buffer = makeIR(6.5, 2.0);
+  const longRet = ctx.createGain(); longRet.gain.value = 0.4;
+  longSend.connect(longConv); longConv.connect(longRet); longRet.connect(masterGain);
+
+  // Layer gains
+  ['drone','bell','voice','violin','pad','wind'].forEach(name => {
+    layerGains[name] = ctx.createGain();
+    layerGains[name].gain.value = 0;
+    layerGains[name].connect(masterGain);
+    layerGains[name].connect(reverbSend);
+  });
+  layerGains.bell.connect(longSend);
+  layerGains.violin.connect(longSend);
+
+  // Connect Faust nodes to layer gains
+  if (vocalNode) {
+    try { vocalNode.connect(layerGains.voice); } catch(e) { console.warn(e); }
+  }
+  if (violinNode) {
+    try { violinNode.connect(layerGains.violin); } catch(e) { console.warn(e); }
+  }
+}
+
+function makeIR(duration, decay) {
+  const rate = ctx.sampleRate;
+  const length = Math.floor(rate * duration);
+  const impulse = ctx.createBuffer(2, length, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = impulse.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i/length, decay);
+    }
+  }
+  return impulse;
+}
+
+// ==================== DRONE ====================
+function startDrone() {
+  layerGains.drone.gain.setTargetAtTime(volSlider('Drone')/100 * 0.5, ctx.currentTime, 8);
+  const oscs = [];
+  DRONE_NOTES.forEach((note, i) => {
+    const osc = ctx.createOscillator(); osc.type = 'sine';
+    osc.frequency.value = mtof(note) * Math.pow(2, rand(0.5,4.0)/1200);
+    const g = ctx.createGain(); g.gain.value = DRONE_GAINS[i];
+    const lfo = ctx.createOscillator(); lfo.type = 'sine';
+    lfo.frequency.value = 1/rand(18,38);
+    const lg = ctx.createGain(); lg.gain.value = DRONE_GAINS[i]*0.28;
+    lfo.connect(lg); lg.connect(g.gain);
+    osc.connect(g); g.connect(layerGains.drone);
+    osc.start(); lfo.start(); oscs.push(osc, lfo);
+  });
+  schedulers.drone = oscs;
+}
+
+// ==================== BELL ====================
+function playBell() {
+  const note = pick(PENTA); const freq = mtof(note); const t = ctx.currentTime;
+  const carrier = ctx.createOscillator(); carrier.type='sine'; carrier.frequency.value=freq;
+  const mod = ctx.createOscillator(); mod.type='sine'; mod.frequency.value=freq*2.01;
+  const mg = ctx.createGain(); mg.gain.setValueAtTime(freq*1.5,t);
+  mg.gain.exponentialRampToValueAtTime(freq*0.01, t+4);
+  mod.connect(mg); mg.connect(carrier.frequency);
+  const env = ctx.createGain(); env.gain.setValueAtTime(0,t);
+  env.gain.linearRampToValueAtTime(0.3, t+0.01);
+  env.gain.exponentialRampToValueAtTime(0.001, t+5);
+  const pan = ctx.createStereoPanner(); pan.pan.value = rand(-0.6,0.6);
+  carrier.connect(env); env.connect(pan); pan.connect(layerGains.bell);
+  carrier.start(t); mod.start(t); carrier.stop(t+6); mod.stop(t+6);
+}
+
+function scheduleBells() {
+  setTimeout(()=>{ if(isPlaying) playBell(); }, 2000);
+  function tick() {
+    if(!isPlaying) return;
+    playBell();
+    const density = paramSlider('BellDens')/100;
+    const interval = Math.max(4, 30 - density*24 + rand(-4,8));
+    schedulers.bell = setTimeout(tick, interval*1000);
+  }
+  schedulers.bell = setTimeout(tick, 15000);
+}
+
+// ==================== VOCAL (Faust FOF) ====================
+function triggerVocalNote(freq, duration) {
+  if (!vocalNode) return;
+  const t = ctx.currentTime;
+  const vowelVal = paramSlider('Vowel');
+  const gainVal = paramSlider('VocalGain')/100 * 0.65;
+  vocalNode.setParamValue('/vocal/midi/freq', freq);
+  vocalNode.setParamValue('/vocal/otherParams/vowel', vowelVal);
+  vocalNode.setParamValue('/vocal/midi/gain', gainVal);
+  vocalNode.setParamValue('/vocal/gate', 1);
+  setTimeout(() => {
+    vocalNode.setParamValue('/vocal/gate', 0);
+  }, duration * 1000);
+}
+
+function scheduleVoice() {
+  function tick() {
+    if(!isPlaying) return;
+    const speed = paramSlider('VoiceSpd')/100;
+    const note = pick(PENTA.slice(2));
+    const freq = mtof(note);
+    const duration = rand(3,6) + speed*4;
+    triggerVocalNote(freq, duration);
+    const gap = Math.max(0.5, rand(3,8) - speed*4);
+    schedulers.voice = setTimeout(tick, (duration+gap)*1000);
+  }
+  schedulers.voice = setTimeout(tick, 8000);
+}
+
+// ==================== VIOLIN (Faust physical model) ====================
+function playViolinPhrase() {
+  if (!violinNode) return;
+  const motifLen = randInt(3,5);
+  const scaleRoot = pick([0,2,4]);
+  let time = 0;
+  for (let i = 0; i < motifLen; i++) {
+    const noteIdx = Math.min(scaleRoot + randInt(0,4), PENTA.length-1);
+    const freq = mtof(PENTA[noteIdx]);
+    const noteDur = rand(2.2, 3.8);
+    const gainVal = paramSlider('ViolinGain')/100 * 0.48;
+    const bowVal = paramSlider('Bow')/100;
+    setTimeout(() => {
+      if (!isPlaying) return;
+      violinNode.setParamValue('/violin/midi/freq', freq);
+      violinNode.setParamValue('/violin/midi/gain', gainVal);
+      violinNode.setParamValue('/violin/bow/pressure', 0.2 + bowVal*0.5);
+      violinNode.setParamValue('/violin/gate', 1);
+      setTimeout(() => {
+        violinNode.setParamValue('/violin/gate', 0);
+      }, (noteDur - 0.3) * 1000);
+    }, time * 1000);
+    time += noteDur - 0.5;
+  }
+  return time;
+}
+
+function scheduleViolin() {
+  function tick() {
+    if(!isPlaying) return;
+    const phraseDur = playViolinPhrase();
+    schedulers.violin = setTimeout(tick, (phraseDur + rand(6,12)) * 1000);
+  }
+  schedulers.violin = setTimeout(tick, 5000);
+}
+
+// ==================== PAD ====================
+const PAD_CHORDS = [[57,64,67,71],[53,60,65,69],[48,55,62,67],[55,62,66,69]];
+let padIdx = 0;
+function schedulePads() {
+  function playChord() {
+    if(!isPlaying) return;
+    const t = ctx.currentTime; const chord = PAD_CHORDS[padIdx % 4]; padIdx++;
+    const dur = rand(14,22);
+    chord.forEach(note => {
+      const osc = ctx.createOscillator(); osc.type='triangle';
+      osc.frequency.value = mtof(note) * Math.pow(2, rand(-2,2)/1200);
+      const env = ctx.createGain(); env.gain.setValueAtTime(0,t);
+      env.gain.linearRampToValueAtTime(0.025, t+dur*0.3);
+      env.gain.setValueAtTime(0.025, t+dur*0.7);
+      env.gain.linearRampToValueAtTime(0, t+dur);
+      osc.connect(env); env.connect(layerGains.pad);
+      osc.start(t); osc.stop(t+dur+1);
+    });
+    schedulers.pad = setTimeout(playChord, dur*750);
+  }
+  schedulers.pad = setTimeout(playChord, 6000);
+}
+
+// ==================== WIND ====================
+let noiseBuf = null;
+function makeNoiseBuffer(seconds) {
+  if (noiseBuf && noiseBuf.duration >= seconds) return noiseBuf;
+  const rate = ctx.sampleRate;
+  noiseBuf = ctx.createBuffer(1, Math.floor(rate*seconds), rate);
+  const d = noiseBuf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  return noiseBuf;
+}
+function scheduleWind() {
+  schedulers.wind = setTimeout(() => {
+    if(!isPlaying) return;
+    const gain = layerGains.wind;
+    const t = ctx.currentTime;
+    gain.gain.setTargetAtTime(volSlider('Wind')/100 * 0.15, t, 5);
+    const gustInterval = setInterval(() => {
+      if(!isPlaying) { clearInterval(gustInterval); return; }
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass';
+      bp.frequency.value = rand(400,1200); bp.Q.value = rand(0.5,1.5);
+      const n = ctx.createBufferSource(); n.buffer = makeNoiseBuffer(2); n.loop = true;
+      const ng = ctx.createGain(); ng.gain.value = 0;
+      ng.gain.setTargetAtTime(0.04, ctx.currentTime, 3);
+      ng.gain.setTargetAtTime(0, ctx.currentTime + rand(4,8), 5);
+      n.connect(bp); bp.connect(ng); ng.connect(gain);
+      n.start(); n.stop(ctx.currentTime + 15);
+    }, rand(8,15)*1000);
+    schedulers.windGust = gustInterval;
+  }, 30000);
+}
+
+// ==================== UI ====================
+function volSlider(name) { const el = document.getElementById('vol'+name); return el ? parseFloat(el.value) : 50; }
+function paramSlider(name) { const el = document.getElementById('param'+name); return el ? parseFloat(el.value) : 50; }
+function bindSlider(inputId, valId, cb) {
+  const el = document.getElementById(inputId);
+  const label = document.getElementById(valId);
+  if(!el) return;
+  el.addEventListener('input', () => {
+    if(label) label.textContent = el.value;
+    if(cb) cb(parseFloat(el.value));
+  });
+}
+
+['Drone','Bell','Voice','Violin','Pad','Wind','Master','Reverb'].forEach(name => {
+  bindSlider('vol'+name, 'val'+name, () => { if(isPlaying) updateGains(); });
+});
+bindSlider('paramVowel', 'valVowel', (v) => {
+  document.getElementById('valVowel').textContent = VOWEL_NAMES[Math.min(4,Math.floor(v))];
+});
+bindSlider('paramVocalGain', 'valVocalGain');
+bindSlider('paramBow', 'valBow');
+bindSlider('paramViolinGain', 'valViolinGain');
+bindSlider('paramBellDens', 'valBellDens');
+bindSlider('paramVoiceSpd', 'valVoiceSpd');
+
+function updateGains() {
+  ['Drone','Bell','Voice','Violin','Pad','Wind'].forEach(name => {
+    const key = name.toLowerCase();
+    if(layerGains[key]) {
+      const val = volSlider(name)/100;
+      layerGains[key].gain.setTargetAtTime(key==='drone'?val*0.5:val*0.3, ctx.currentTime, 0.3);
+    }
+  });
+  if(masterGain) masterGain.gain.setTargetAtTime(volSlider('Master')/100, ctx.currentTime, 0.1);
+  if(reverbSend) reverbSend.gain.setTargetAtTime(volSlider('Reverb')/100, ctx.currentTime, 0.1);
+}
+
+// ==================== TRANSPORT ====================
+const btn = document.getElementById('btnPlay');
+const statusText = document.getElementById('statusText');
+const timerEl = document.getElementById('timer');
+
+btn.addEventListener('click', async () => {
+  if(!isPlaying) {
+    await ctx.resume();
+    initAudioGraph();
+    startTime = ctx.currentTime;
+    isPlaying = true;
+    btn.textContent = '■'; btn.classList.add('playing');
+    statusText.textContent = '正在播放...';
+    startDrone(); scheduleBells(); scheduleVoice(); scheduleViolin(); schedulePads(); scheduleWind();
+    updateGains(); updateTimer();
+  } else {
+    stopAll();
+  }
+});
+
+function stopAll() {
+  isPlaying = false;
+  btn.textContent = '▶'; btn.classList.remove('playing');
+  statusText.textContent = '已停止';
+  timerEl.textContent = '00:00';
+  Object.values(schedulers).forEach(s => {
+    if(typeof s === 'number') clearTimeout(s);
+    if(typeof s === 'object' && s._onTimeout) clearInterval(s);
+  });
+  schedulers = {};
+  if(masterGain) masterGain.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
+}
+
+function updateTimer() {
+  if(!isPlaying) return;
+  const el = Math.floor(ctx.currentTime - startTime);
+  timerEl.textContent = String(Math.floor(el/60)).padStart(2,'0') + ':' + String(el%60).padStart(2,'0');
+  requestAnimationFrame(updateTimer);
+}
+
+// ==================== VISUALIZER ====================
+(function drawViz() {
+  const canvas = document.getElementById('canvas');
+  const cctx = canvas.getContext('2d');
+  function draw() {
+    requestAnimationFrame(draw);
+    const w = canvas.width = canvas.clientWidth * devicePixelRatio;
+    const h = canvas.height = canvas.clientHeight * devicePixelRatio;
+    cctx.clearRect(0,0,w,h);
+    if(!analyser || !isPlaying) return;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    const bars = 80;
+    for(let i=0;i<bars;i++) {
+      const idx = Math.floor(i * data.length / bars / 2);
+      const val = data[idx]/255;
+      const barH = val * h * 0.9;
+      cctx.fillStyle = `hsla(${200+val*60},70%,${30+val*30}%,${0.3+val*0.5})`;
+      cctx.fillRect(i*(w/bars), h-barH, (w/bars)-1, barH);
+    }
+  }
+  draw();
+})();
+
+// ==================== INIT ON LOAD ====================
+initFaust();
+</script>
+</body>
+</html>
